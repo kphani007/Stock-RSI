@@ -2,3 +2,4 @@ streamlit
 yfinance
 openpyxl
 pandas
+requests
