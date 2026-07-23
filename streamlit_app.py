@@ -3,11 +3,11 @@ NSE Daily RSI Screener - Web App
 --------------------------------
 Screens NSE stocks for 14-day RSI >= your threshold and shows:
 
-  Date | Stock Name | Market Cap | Current Price | 52 Week High |
-  RSI | Recommendation to buy or sell | 1 Year Target
+  Date | Stock Name | Sector | Current Price (Rs) | 52 Week High (Rs) |
+  RSI | Buy/Sell | 1 Year Target (Rs)
 
-Universe options: NIFTY 50 (fast) or the full NSE equity list (~2000 stocks,
-slow). You can also upload your own list of symbols.
+Universe options: NIFTY 50 (fast), NIFTY 500 (broad), the full NSE equity
+list (slow), or your own pasted list of symbols.
 
 Deploy free on Streamlit Community Cloud (share.streamlit.io). Locally:
   pip install -r requirements.txt
@@ -30,13 +30,6 @@ from openpyxl.utils import get_column_letter
 
 RSI_PERIOD = 14
 
-# Market-cap buckets in INR crore. SEBI's official definition is rank-based
-# (top 100 = Large, 101-250 = Mid, 251+ = Small); these absolute thresholds
-# are the commonly used retail approximation. Adjust if you prefer.
-MCAP_LARGE_CR = 20000   # >= 20,000 cr  -> Large
-MCAP_MID_CR = 5000      # 5,000-20,000  -> Mid
-MCAP_SMALL_CR = 500     # 500-5,000     -> Small (below 500 -> Micro)
-
 NIFTY50 = [
     "ADANIENT.NS", "ADANIPORTS.NS", "APOLLOHOSP.NS", "ASIANPAINT.NS",
     "AXISBANK.NS", "BAJAJ-AUTO.NS", "BAJFINANCE.NS", "BAJAJFINSV.NS",
@@ -52,12 +45,12 @@ NIFTY50 = [
 ]
 
 HEADERS = [
-    "Date", "Stock Name", "Market Cap", "Current Price (Rs)", "52 Week High (Rs)",
-    "RSI", "Recommendation to buy or sell", "1 Year Target (Rs)",
+    "Date", "Stock Name", "Sector", "Current Price (Rs)", "52 Week High (Rs)",
+    "RSI", "Buy/Sell", "1 Year Target (Rs)",
 ]
 
-NSE_EQUITY_LIST_URL = "https://nsearchives.nseindia.com/content/equities/EQUITY_L.csv"
-NIFTY500_LIST_URL = "https://niftyindices.com/IndexConstituent/ind_nifty500list.csv"
+_EQUITY_LIST_URL = "https://nsearchives.nseindia.com/content/equities/EQUITY_L.csv"
+_INDEX500_LIST_URL = "https://niftyindices.com/IndexConstituent/ind_nifty500list.csv"
 
 
 # ------------------------------ indicators --------------------------------
@@ -79,23 +72,10 @@ def compute_rsi(close: pd.Series, period: int = RSI_PERIOD) -> float | None:
     return float(100.0 - (100.0 / (1.0 + (g / l))))
 
 
-def classify_market_cap(mcap_inr: float | None) -> str:
-    if not mcap_inr or mcap_inr <= 0:
-        return "n/a"
-    cr = mcap_inr / 1e7  # rupees -> crore
-    if cr >= MCAP_LARGE_CR:
-        return "Large"
-    if cr >= MCAP_MID_CR:
-        return "Mid"
-    if cr >= MCAP_SMALL_CR:
-        return "Small"
-    return "Micro"
-
-
 # ------------------------------ universe ----------------------------------
 
 def _fetch_symbol_csv(url: str) -> list[str]:
-    """Download a CSV with a SYMBOL column and return Yahoo (.NS) tickers. [] on failure."""
+    """Download a CSV with a SYMBOL column and return .NS tickers. [] on failure."""
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
         "Accept": "text/csv,*/*",
@@ -112,14 +92,14 @@ def _fetch_symbol_csv(url: str) -> list[str]:
 
 @st.cache_data(ttl=86400, show_spinner=False)
 def load_all_nse_tickers() -> list[str]:
-    """Fetch the official NSE equity master list (~2000 stocks). [] on failure."""
-    return _fetch_symbol_csv(NSE_EQUITY_LIST_URL)
+    """Full NSE equity list (~2000 stocks). [] on failure."""
+    return _fetch_symbol_csv(_EQUITY_LIST_URL)
 
 
 @st.cache_data(ttl=86400, show_spinner=False)
 def load_nifty500_tickers() -> list[str]:
-    """Fetch the official NIFTY 500 constituent list. [] on failure."""
-    return _fetch_symbol_csv(NIFTY500_LIST_URL)
+    """NIFTY 500 constituent list. [] on failure."""
+    return _fetch_symbol_csv(_INDEX500_LIST_URL)
 
 
 def parse_uploaded_symbols(text: str) -> list[str]:
@@ -136,19 +116,20 @@ def parse_uploaded_symbols(text: str) -> list[str]:
 
 def fetch_fundamentals(symbol: str) -> dict:
     """
-    Best-effort analyst reco, 1y mean target, market cap, and display name.
-    Tries .info first (one request covers all), then analyst_price_targets as
-    a target fallback. Returns 'n/a' where Yahoo has no data (common for
-    small/micro caps with no analyst coverage) rather than failing silently.
+    Best-effort sector, consensus rating, 1-year mean target and display name.
+    Returns 'n/a' where no data exists (common for smaller, thinly covered
+    stocks) rather than failing silently.
     """
     name = symbol.replace(".NS", "")
-    reco, target, mcap = "n/a", "n/a", None
+    sector, reco, target = "n/a", "n/a", "n/a"
     tk = yf.Ticker(symbol)
 
     try:
         info = tk.info or {}
         name = info.get("shortName") or info.get("longName") or name
-        mcap = info.get("marketCap")
+        sec = info.get("sector")
+        if sec:
+            sector = str(sec).strip()
         rk = info.get("recommendationKey")
         if rk and rk.lower() != "none":
             reco = rk.replace("_", " ").title()
@@ -167,13 +148,7 @@ def fetch_fundamentals(symbol: str) -> dict:
         except Exception:
             pass
 
-    if mcap is None:  # fast_info is a lighter path for market cap
-        try:
-            mcap = getattr(tk.fast_info, "market_cap", None)
-        except Exception:
-            pass
-
-    return {"name": name, "reco": reco, "target": target, "mcap": mcap}
+    return {"name": name, "sector": sector, "reco": reco, "target": target}
 
 
 @st.cache_data(ttl=1800, show_spinner=False)
@@ -210,24 +185,24 @@ def scan(tickers: tuple[str, ...], threshold: float, fetch_fund_limit: int) -> p
 
     rows = []
     total = min(len(hits), fetch_fund_limit)
-    progress.progress(0.0, text=f"Fetching fundamentals for {total} matched stocks...")
+    progress.progress(0.0, text=f"Fetching details for {total} matched stocks...")
     for idx, (sym, rsi, price, high52) in enumerate(hits):
         if idx < fetch_fund_limit:
             f = fetch_fundamentals(sym)
             time.sleep(0.4)  # be polite; reduces rate-limiting
             progress.progress((idx + 1) / max(total, 1),
-                              text=f"Fetched {idx + 1}/{total} fundamentals...")
+                              text=f"Fetched {idx + 1}/{total} details...")
         else:
-            f = {"name": sym.replace(".NS", ""), "reco": "not fetched",
-                 "target": "not fetched", "mcap": None}
+            f = {"name": sym.replace(".NS", ""), "sector": "not fetched",
+                 "reco": "not fetched", "target": "not fetched"}
         rows.append({
             "Date": dt.date.today().isoformat(),
             "Stock Name": f'{f["name"]} ({sym.replace(".NS", "")})',
-            "Market Cap": classify_market_cap(f["mcap"]),
+            "Sector": f["sector"],
             "Current Price (Rs)": round(price, 2),
             "52 Week High (Rs)": round(high52, 2) if high52 else "n/a",
             "RSI": round(rsi, 1),
-            "Recommendation to buy or sell": f["reco"],
+            "Buy/Sell": f["reco"],
             "1 Year Target (Rs)": f["target"],
         })
     progress.empty()
@@ -265,7 +240,7 @@ def to_excel_bytes(df: pd.DataFrame) -> bytes:
             for cell in ws[i]:
                 cell.fill = hot_fill
 
-    for i, w in enumerate([12, 34, 11, 16, 16, 8, 26, 16], start=1):
+    for i, w in enumerate([12, 34, 22, 16, 16, 8, 14, 16], start=1):
         ws.column_dimensions[get_column_letter(i)].width = w
     ws.freeze_panes = "A2"
     ws.auto_filter.ref = f"A1:H{max(ws.max_row, 2)}"
@@ -278,9 +253,9 @@ def to_excel_bytes(df: pd.DataFrame) -> bytes:
 
 st.set_page_config(page_title="NSE RSI Screener", page_icon="chart", layout="wide")
 st.title("NSE Daily RSI Screener")
-st.caption("Stocks with 14-day RSI at or above your threshold. Not financial advice - "
-           "recommendation and 1-year target are Yahoo Finance analyst consensus and are "
-           "often blank for smaller stocks with no analyst coverage.")
+st.caption("Stocks with 14-day RSI at or above your threshold. For information only - "
+           "not investment advice. Buy/Sell and 1-year target are third-party analyst "
+           "consensus figures, not the view of this app, and are often blank for smaller stocks.")
 
 with st.sidebar:
     st.header("Settings")
@@ -293,19 +268,18 @@ with st.sidebar:
     if universe_choice == "Upload my own list":
         uploaded = st.text_area("Paste symbols (one per line, e.g. RELIANCE or RELIANCE.NS)")
     fetch_limit = st.number_input(
-        "Fetch reco/target/mcap for top N matches", 10, 500, 100, 10,
-        help="Each fundamentals lookup is a separate request. Capping this keeps "
-             "large scans from timing out or getting rate-limited.")
+        "Fetch sector/rating/target for top N matches", 10, 500, 100, 10,
+        help="Each lookup is a separate request. Capping this keeps large scans "
+             "from timing out.")
     run = st.button("Run screen", type="primary")
 
 if universe_choice == "NIFTY 500 (broad)":
     st.info("NIFTY 500 covers ~92% of NSE market cap across large, mid and small caps - "
-            "the recommended broad daily scan. Runs in about a minute and most names have "
-            "analyst coverage.")
+            "the recommended broad daily scan. Runs in about a minute.")
 elif universe_choice == "All NSE (~2000, slow)":
     st.info("Full NSE scan pulls ~2000 stocks and can take several minutes. On the free "
-            "Streamlit tier it may occasionally time out or get rate-limited by Yahoo - "
-            "just press Run again if so. NIFTY 500 is the better broad option for daily use.")
+            "tier it may occasionally time out - just press Run again if so. "
+            "NIFTY 500 is the better broad option for daily use.")
 
 if run:
     if universe_choice == "NIFTY 50 (fast)":
@@ -313,15 +287,14 @@ if run:
     elif universe_choice == "NIFTY 500 (broad)":
         tickers = load_nifty500_tickers()
         if not tickers:
-            st.error("Couldn't fetch the NIFTY 500 list (niftyindices.com sometimes blocks "
-                     "cloud servers). Try again in a minute, or use 'Upload my own list'.")
+            st.error("Couldn't load the NIFTY 500 list right now. Try again in a minute, "
+                     "or use 'Upload my own list'.")
             st.stop()
     elif universe_choice == "All NSE (~2000, slow)":
         tickers = load_all_nse_tickers()
         if not tickers:
-            st.error("Couldn't fetch the NSE master list (NSE sometimes blocks cloud servers). "
-                     "Use 'Upload my own list' instead - download EQUITY_L.csv from the NSE "
-                     "website and paste the SYMBOL column.")
+            st.error("Couldn't load the full NSE list right now. Try again in a minute, "
+                     "or use 'Upload my own list'.")
             st.stop()
     else:
         tickers = parse_uploaded_symbols(uploaded or "")
@@ -341,9 +314,9 @@ if run:
             file_name=f"RSI_Screener_{dt.date.today().isoformat()}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
-        na = int((df["Recommendation to buy or sell"] == "n/a").sum())
+        na = int((df["Buy/Sell"] == "n/a").sum())
         if na:
-            st.caption(f"Note: {na} of {len(df)} stocks have no analyst recommendation on "
-                       "Yahoo Finance (typical for small/micro caps) and show 'n/a'.")
+            st.caption(f"Note: {na} of {len(df)} stocks have no published analyst rating "
+                       "(typical for smaller companies) and show 'n/a'.")
 else:
     st.write("Pick your settings in the sidebar and press **Run screen**.")
