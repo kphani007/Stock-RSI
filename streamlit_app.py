@@ -1,6 +1,6 @@
 """
-Momentum Desk - NSE RSI Screener
---------------------------------
+StockHunter - NSE RSI Screener
+------------------------------
 Daily screen of NSE stocks by 14-day RSI, with a per-stock detail view
 covering market cap, support/resistance and a financial health scorecard.
 
@@ -46,8 +46,13 @@ HEADERS = [
     "RSI", "Buy/Sell", "1 Year Target (Rs)",
 ]
 
+UNIVERSES = ["NIFTY 50", "NIFTY 500", "All NSE", "My list"]
+
 _EQUITY_LIST_URL = "https://nsearchives.nseindia.com/content/equities/EQUITY_L.csv"
 _INDEX500_LIST_URL = "https://niftyindices.com/IndexConstituent/ind_nifty500list.csv"
+
+SECTOR_PALETTE = ["#0E7C86", "#6B5BC7", "#C77A0B", "#1F6FB2",
+                  "#0B7A4B", "#B3467A", "#2F8F5B", "#8A5A2B"]
 
 DISCLAIMER = (
     "Everything shown here is for reference and general information only. It is not "
@@ -65,68 +70,79 @@ CSS = """
 @import url('https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Inter:wght@400;500&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
 
 :root{
-  --ink:#101A24; --panel:#F4F7F9; --line:#DFE7ED;
-  --primary:#0E7C86; --primary-soft:#E3F2F3;
-  --pos:#0B7A4B; --neg:#B3261E; --neu:#6B7A8F; --nodata:#A8B4BF;
+  --ink:#111C2B; --panel:#F5F8FA; --line:#DDE6ED;
+  --teal:#0E7C86; --violet:#6B5BC7; --amber:#C77A0B; --blue:#1F6FB2;
+  --green:#0B7A4B; --coral:#D8542F; --red:#B3261E; --plum:#B3467A;
   --text:#16202B; --muted:#5E6E7E;
 }
 html, body, [class*="css"], .stMarkdown { font-family:'Inter', sans-serif; color:var(--text); }
 h1,h2,h3,h4,h5 { font-family:'Archivo', sans-serif; letter-spacing:-0.02em; }
-[data-testid="stMetricValue"], [data-testid="stDataFrame"] { font-family:'IBM Plex Mono', monospace; }
+[data-testid="stDataFrame"] { font-family:'IBM Plex Mono', monospace; }
 
 .band{
-  background:var(--ink); border-radius:14px; padding:22px 26px; margin-bottom:18px;
-  display:flex; align-items:flex-end; justify-content:space-between; flex-wrap:wrap; gap:12px;
+  background:linear-gradient(100deg,#111C2B 0%,#123A44 55%,#0E7C86 100%);
+  border-radius:16px; padding:24px 28px; margin-bottom:16px;
+  display:flex; align-items:flex-end; justify-content:space-between;
+  flex-wrap:wrap; gap:12px;
 }
-.band-name{ font-family:'Archivo',sans-serif; font-weight:700; font-size:1.55rem;
+.band-name{ font-family:'Archivo',sans-serif; font-weight:700; font-size:1.7rem;
   color:#FFF; letter-spacing:-0.03em; line-height:1.1; }
-.band-sub{ font-family:'IBM Plex Mono',monospace; font-size:0.78rem; color:#8FA3B4;
-  margin-top:6px; letter-spacing:0.02em; }
-.band-date{ font-family:'IBM Plex Mono',monospace; font-size:0.78rem; color:#C9D6E0;
-  border:1px solid #2C3B49; border-radius:999px; padding:5px 12px; }
+.band-sub{ font-family:'IBM Plex Mono',monospace; font-size:0.78rem;
+  color:#B6D8DC; margin-top:6px; }
+.band-date{ font-family:'IBM Plex Mono',monospace; font-size:0.78rem; color:#EAF6F7;
+  background:rgba(255,255,255,0.14); border-radius:999px; padding:6px 14px; }
 
-.stat{ background:var(--panel); border:1px solid var(--line); border-radius:12px;
-  padding:14px 16px; height:100%; }
-.stat-k{ font-size:0.7rem; text-transform:uppercase; letter-spacing:0.08em;
-  color:var(--muted); font-weight:500; }
-.stat-v{ font-family:'IBM Plex Mono',monospace; font-size:1.32rem; font-weight:600;
-  color:var(--text); margin-top:4px; line-height:1.2; }
-.stat-n{ font-size:0.75rem; color:var(--muted); margin-top:2px; }
+.sec-label{ font-size:0.72rem; text-transform:uppercase; letter-spacing:0.09em;
+  color:var(--muted); font-weight:600; margin:2px 0 6px; }
 
-.score-row{ display:flex; gap:10px; flex-wrap:wrap; margin:4px 0 14px; }
-.score{ flex:1 1 120px; background:#FFF; border:1px solid var(--line);
-  border-left:4px solid var(--neu); border-radius:10px; padding:12px 14px; }
-.score.pos{ border-left-color:var(--pos); }
-.score.neg{ border-left-color:var(--neg); }
-.score.neu{ border-left-color:var(--neu); }
-.score.nod{ border-left-color:var(--nodata); }
-.score-n{ font-family:'IBM Plex Mono',monospace; font-size:1.6rem; font-weight:600; line-height:1; }
-.score-l{ font-size:0.74rem; color:var(--muted); margin-top:5px; }
+.stat{ border-radius:12px; padding:14px 16px; height:100%; border:1px solid var(--line);
+  border-top:4px solid var(--teal); background:#FFF; }
+.stat.v{ border-top-color:var(--violet); }
+.stat.a{ border-top-color:var(--amber); }
+.stat.b{ border-top-color:var(--blue); }
+.stat.g{ border-top-color:var(--green); }
+.stat-k{ font-size:0.68rem; text-transform:uppercase; letter-spacing:0.08em;
+  color:var(--muted); font-weight:600; }
+.stat-v{ font-family:'IBM Plex Mono',monospace; font-size:1.3rem; font-weight:600;
+  margin-top:5px; line-height:1.2; }
+.stat-n{ font-size:0.73rem; color:var(--muted); margin-top:3px; }
 
-.chk{ display:flex; align-items:baseline; gap:10px; padding:7px 0;
+.score-row{ display:flex; gap:10px; flex-wrap:wrap; margin:6px 0 16px; }
+.score{ flex:1 1 118px; border-radius:10px; padding:13px 15px; color:#FFF; }
+.score.pos{ background:var(--green); }
+.score.neu{ background:#6B7A8F; }
+.score.neg{ background:var(--red); }
+.score.nod{ background:#A8B4BF; }
+.score-n{ font-family:'IBM Plex Mono',monospace; font-size:1.7rem; font-weight:600;
+  line-height:1; }
+.score-l{ font-size:0.75rem; margin-top:5px; opacity:0.92; }
+
+.chk{ display:flex; align-items:baseline; gap:10px; padding:8px 0;
   border-bottom:1px solid var(--line); font-size:0.87rem; }
 .chk:last-child{ border-bottom:none; }
-.tag{ font-family:'IBM Plex Mono',monospace; font-size:0.66rem; font-weight:600;
-  padding:2px 7px; border-radius:4px; text-transform:uppercase; letter-spacing:0.05em;
-  flex:0 0 auto; min-width:62px; text-align:center; }
-.tag.Yes{ background:#E4F3EC; color:var(--pos); }
-.tag.No{ background:#FBE7E5; color:var(--neg); }
-.tag.Neutral{ background:#ECF0F3; color:var(--neu); }
-.tag.NoData{ background:#F2F5F7; color:var(--nodata); }
+.tag{ font-family:'IBM Plex Mono',monospace; font-size:0.65rem; font-weight:600;
+  padding:3px 8px; border-radius:5px; text-transform:uppercase; letter-spacing:0.05em;
+  flex:0 0 auto; min-width:64px; text-align:center; color:#FFF; }
+.tag.Yes{ background:var(--green); }
+.tag.No{ background:var(--red); }
+.tag.Neutral{ background:#6B7A8F; }
+.tag.NoData{ background:#BFC9D2; }
 .chk-n{ flex:1 1 auto; }
-.chk-d{ font-family:'IBM Plex Mono',monospace; font-size:0.78rem; color:var(--muted);
-  flex:0 0 auto; }
+.chk-d{ font-family:'IBM Plex Mono',monospace; font-size:0.78rem; color:var(--muted); }
 
-.lvl{ display:flex; justify-content:space-between; padding:6px 10px; border-radius:6px;
-  font-family:'IBM Plex Mono',monospace; font-size:0.85rem; margin-bottom:3px; }
-.lvl.r{ background:#FBECEA; color:#8C2F26; }
-.lvl.p{ background:var(--primary-soft); color:#0A5A62; font-weight:600; }
-.lvl.s{ background:#E7F3EC; color:#0A5C3A; }
-.lvl.now{ background:var(--ink); color:#FFF; font-weight:600; }
+.lvl{ display:flex; justify-content:space-between; padding:7px 11px; border-radius:7px;
+  font-family:'IBM Plex Mono',monospace; font-size:0.85rem; margin-bottom:4px;
+  color:#FFF; }
+.lvl.r{ background:#D8542F; }
+.lvl.r2{ background:#E07E5F; }
+.lvl.p{ background:var(--violet); font-weight:600; }
+.lvl.s{ background:#2F8F5B; }
+.lvl.s2{ background:#5CAE82; }
+.lvl.now{ background:var(--ink); font-weight:600; }
 
 .disc{ font-size:0.76rem; color:var(--muted); line-height:1.6;
-  border-top:1px solid var(--line); padding-top:14px; margin-top:8px; }
-.stButton>button{ border-radius:8px; font-weight:500; }
+  border-top:1px solid var(--line); padding-top:14px; margin-top:10px; }
+.stButton>button{ border-radius:9px; font-weight:500; }
 </style>
 """
 
@@ -178,6 +194,33 @@ def swing_levels(close: pd.Series, price: float, window: int = 10):
             float(res.min()) if len(res) else None)
 
 
+def sector_color(name) -> str:
+    if not isinstance(name, str) or name in ("n/a", "not loaded", ""):
+        return "#8794A1"
+    return SECTOR_PALETTE[sum(ord(c) for c in name) % len(SECTOR_PALETTE)]
+
+
+def rsi_color(v) -> str:
+    if not isinstance(v, (int, float)):
+        return "#5E6E7E"
+    if v >= 80:
+        return "#B3261E"
+    if v >= 70:
+        return "#D8542F"
+    return "#C77A0B"
+
+
+def reco_color(v) -> str:
+    s = str(v).lower()
+    if "strong buy" in s or s == "buy":
+        return "#0B7A4B"
+    if "sell" in s:
+        return "#B3261E"
+    if "hold" in s:
+        return "#C77A0B"
+    return "#8794A1"
+
+
 # --------------------------- health scorecard -----------------------------
 
 def _find_row(fin, *keys):
@@ -208,7 +251,6 @@ def _band(v, good, ok, higher_better=True):
 
 
 def health_checks(income, balance, cash) -> list[dict]:
-    """15 mechanical checks on reported financials. Each -> Yes/Neutral/No/No Data."""
     out = []
 
     def add(name, verdict, detail=""):
@@ -484,10 +526,10 @@ def to_excel_bytes(df: pd.DataFrame) -> bytes:
     wb = Workbook()
     ws = wb.active
     ws.title = "RSI Screener"
-    hfill = PatternFill("solid", fgColor="101A24")
+    hfill = PatternFill("solid", fgColor="111C2B")
     hfont = Font(name="Arial", bold=True, color="FFFFFF", size=11)
     bfont = Font(name="Arial", size=11)
-    hot = PatternFill("solid", fgColor="E3F2F3")
+    hot = PatternFill("solid", fgColor="FDEBE4")
 
     ws.append(HEADERS)
     for cell in ws[1]:
@@ -522,10 +564,10 @@ def to_excel_bytes(df: pd.DataFrame) -> bytes:
 
 # ------------------------------ detail view -------------------------------
 
-def _stat(label: str, value: str, note: str = "") -> str:
-    note_html = f'<div class="stat-n">{note}</div>' if note else ""
-    return (f'<div class="stat"><div class="stat-k">{label}</div>'
-            f'<div class="stat-v">{value}</div>{note_html}</div>')
+def _stat(label: str, value: str, note: str = "", tone: str = "") -> str:
+    n = f'<div class="stat-n">{note}</div>' if note else ""
+    return (f'<div class="stat {tone}"><div class="stat-k">{label}</div>'
+            f'<div class="stat-v">{value}</div>{n}</div>')
 
 
 def render_detail(symbol: str):
@@ -535,7 +577,10 @@ def render_detail(symbol: str):
         return
 
     st.markdown(f"### {symbol}")
-    st.caption(f"{d['name']} · {d['sector']}")
+    st.markdown(
+        f'<span style="color:{sector_color(d["sector"])};font-weight:600">'
+        f'{d["sector"]}</span> · {d["name"]}', unsafe_allow_html=True)
+    st.write("")
 
     price = f"Rs {d['price']:,.2f}" if d["price"] else "n/a"
     mcap = f"Rs {d['mcap']/1e7:,.0f} Cr" if d["mcap"] else "n/a"
@@ -543,34 +588,36 @@ def render_detail(symbol: str):
     rng = f"{d['low52']:,.0f} – {d['high52']:,.0f}" if d["high52"] else "n/a"
     tgt = f"Rs {d['target']:,.2f}" if isinstance(d["target"], (int, float)) else "n/a"
 
-    cols = st.columns(5)
     cards = [
-        _stat("Price", price),
-        _stat("Market cap", mcap, classify_market_cap(d["mcap"])),
-        _stat("RSI (14d)", rsi, "overbought zone" if d["rsi"] and d["rsi"] >= 70 else ""),
-        _stat("52-week range", rng),
-        _stat("1-year target", tgt, f"consensus: {d['reco']}"),
+        _stat("Price", price, "", ""),
+        _stat("Market cap", mcap, classify_market_cap(d["mcap"]), "v"),
+        _stat("RSI (14d)", rsi,
+              "overbought zone" if d["rsi"] and d["rsi"] >= 70 else "momentum", "a"),
+        _stat("52-week range", rng, "", "b"),
+        _stat("1-year target", tgt, f"consensus: {d['reco']}", "g"),
     ]
-    for col, card in zip(cols, cards):
+    for col, card in zip(st.columns(5), cards):
         col.markdown(card, unsafe_allow_html=True)
 
     st.write("")
     tab_levels, tab_health = st.tabs(["Price levels", "Financial health"])
 
     with tab_levels:
-        left, right = st.columns([1, 1])
+        left, right = st.columns(2)
         with left:
-            st.markdown("**Monthly pivot levels**")
+            st.markdown('<div class="sec-label">Monthly pivot levels</div>',
+                        unsafe_allow_html=True)
             if d["levels"]:
                 lv, p = d["levels"], d["price"]
+                tone = {"R3": "r", "R2": "r2", "R1": "r2", "Pivot": "p",
+                        "S1": "s2", "S2": "s2", "S3": "s"}
                 html, placed = [], False
                 for k in ["R3", "R2", "R1", "Pivot", "S1", "S2", "S3"]:
                     if not placed and p and lv[k] < p:
                         html.append(f'<div class="lvl now"><span>Current price</span>'
                                     f'<span>{p:,.2f}</span></div>')
                         placed = True
-                    cls = "p" if k == "Pivot" else ("r" if k.startswith("R") else "s")
-                    html.append(f'<div class="lvl {cls}"><span>{k}</span>'
+                    html.append(f'<div class="lvl {tone[k]}"><span>{k}</span>'
                                 f'<span>{lv[k]:,.2f}</span></div>')
                 if not placed and p:
                     html.append(f'<div class="lvl now"><span>Current price</span>'
@@ -580,7 +627,8 @@ def render_detail(symbol: str):
             else:
                 st.write("Not enough history to compute pivots.")
         with right:
-            st.markdown("**Nearest swing levels**")
+            st.markdown('<div class="sec-label">Nearest swing levels</div>',
+                        unsafe_allow_html=True)
             sup, res = d["swing"]
             st.markdown(
                 f'<div class="lvl r"><span>Resistance</span><span>'
@@ -609,11 +657,11 @@ def render_detail(symbol: str):
                 f'<div class="score nod"><div class="score-n">{cnt.get("No Data",0)}</div>'
                 '<div class="score-l">No data</div></div>'
                 '</div>', unsafe_allow_html=True)
-            rows = "".join(
+            st.markdown("".join(
                 f'<div class="chk"><span class="tag {c["verdict"].replace(" ","")}">'
                 f'{c["verdict"]}</span><span class="chk-n">{c["name"]}</span>'
-                f'<span class="chk-d">{c["detail"]}</span></div>' for c in checks)
-            st.markdown(rows, unsafe_allow_html=True)
+                f'<span class="chk-d">{c["detail"]}</span></div>' for c in checks),
+                unsafe_allow_html=True)
             st.caption("Mechanical checks on reported annual financials. A negative flag "
                        "marks something worth investigating, not a verdict on the company. "
                        "Ratios like debt-to-equity do not carry the same meaning for banks "
@@ -628,66 +676,88 @@ def detail_dialog(symbol: str):
 
 # ---------------------------------- app -----------------------------------
 
-st.set_page_config(page_title="Momentum Desk — NSE RSI Screener",
+st.set_page_config(page_title="StockHunter — NSE RSI Screener",
                    page_icon="📊", layout="wide")
 st.markdown(CSS, unsafe_allow_html=True)
 
 st.markdown(
-    '<div class="band"><div><div class="band-name">Momentum Desk</div>'
-    '<div class="band-sub">NSE · 14-day RSI screen · click any row for detail</div></div>'
+    '<div class="band"><div><div class="band-name">StockHunter</div>'
+    '<div class="band-sub">NSE · 14-day RSI screen · click a symbol for detail</div></div>'
     f'<div class="band-date">{dt.date.today().strftime("%d %b %Y")}</div></div>',
     unsafe_allow_html=True)
 
+# --- sidebar: search only ---
 with st.sidebar:
-    st.markdown("### Screen")
-    threshold = st.slider("RSI at or above", 50, 90, 65, 1)
-    universe_choice = st.radio(
-        "Stocks to scan",
-        ["NIFTY 50 — fastest", "NIFTY 500 — recommended", "All NSE — slow", "My own list"])
-    uploaded = None
-    if universe_choice == "My own list":
-        uploaded = st.text_area("One symbol per line", placeholder="RELIANCE\nTCS\nINFY")
-    fetch_limit = st.number_input("Load details for top N matches", 10, 500, 100, 10,
-                                  help="Each stock is a separate lookup. A lower number "
-                                       "keeps big scans from timing out.")
-    c_run, c_clear = st.columns(2)
-    run = c_run.button("Run screen", type="primary", use_container_width=True)
-    clear = c_clear.button("Clear", use_container_width=True)
-
-    st.divider()
-    st.markdown("### Look up a stock")
+    st.markdown("### Stock Search")
     all_syms = load_all_nse_tickers()
     if all_syms:
         opts = ["—"] + [s.replace(".NS", "") for s in all_syms]
-        picked_search = st.selectbox("Search by symbol", opts,
-                                     help="Type to filter the full NSE list.")
-        if picked_search != "—":
-            if st.button("Open detail", use_container_width=True):
-                detail_dialog(picked_search)
+        picked_search = st.selectbox(" ", opts, label_visibility="collapsed")
+        if picked_search != "—" and st.button("Open detail", use_container_width=True,
+                                              type="primary"):
+            detail_dialog(picked_search)
     else:
-        typed = st.text_input("Symbol", placeholder="RELIANCE")
-        if st.button("Open detail", use_container_width=True) and typed.strip():
+        typed = st.text_input(" ", placeholder="RELIANCE", label_visibility="collapsed")
+        if st.button("Open detail", use_container_width=True, type="primary") \
+                and typed.strip():
             detail_dialog(typed.strip().upper())
 
+# --- hyperlink handler: ?stock=SYMBOL opens the dialog ---
+qp_stock = st.query_params.get("stock")
+if qp_stock and st.session_state.get("qp_opened") != qp_stock:
+    st.session_state["qp_opened"] = qp_stock
+    detail_dialog(str(qp_stock).upper())
+
+# --- universe as buttons ---
+st.markdown('<div class="sec-label">Stocks to scan</div>', unsafe_allow_html=True)
+if "universe" not in st.session_state:
+    st.session_state["universe"] = "NIFTY 50"
+ucols = st.columns(len(UNIVERSES))
+for col, name in zip(ucols, UNIVERSES):
+    if col.button(name, use_container_width=True,
+                  type="primary" if st.session_state["universe"] == name else "secondary",
+                  key=f"u_{name}"):
+        st.session_state["universe"] = name
+        st.rerun()
+universe_choice = st.session_state["universe"]
+
+uploaded = None
+if universe_choice == "My list":
+    uploaded = st.text_area("Symbols, one per line", placeholder="RELIANCE\nTCS\nINFY",
+                            height=90)
+
+c1, c2, c3, c4 = st.columns([3, 2, 1, 1])
+threshold = c1.slider("RSI at or above", 50, 90, 65, 1)
+fetch_limit = c2.number_input("Load details for top N", 10, 500, 100, 10)
+c3.write("")
+run = c3.button("Run screen", type="primary", use_container_width=True)
+c4.write("")
+clear = c4.button("Clear", use_container_width=True)
+
+if universe_choice == "All NSE":
+    st.caption("Full NSE pulls ~2000 stocks and can take several minutes. "
+               "NIFTY 500 is the better broad option for daily use.")
+
 if clear:
-    for k in ("results", "scanned", "threshold", "opened_for", "screener_table"):
+    for k in ("results", "scanned", "threshold", "opened_for", "screener_table",
+              "qp_opened"):
         st.session_state.pop(k, None)
+    st.query_params.clear()
     st.rerun()
 
 if run:
-    if universe_choice == "NIFTY 50 — fastest":
+    if universe_choice == "NIFTY 50":
         tickers = NIFTY50
-    elif universe_choice == "NIFTY 500 — recommended":
+    elif universe_choice == "NIFTY 500":
         tickers = load_nifty500_tickers()
         if not tickers:
-            st.error("The NIFTY 500 list did not load. Try again in a minute, or paste "
-                     "your own list in the sidebar.")
+            st.error("The NIFTY 500 list did not load. Try again in a minute, or use "
+                     "My list.")
             st.stop()
-    elif universe_choice == "All NSE — slow":
+    elif universe_choice == "All NSE":
         tickers = load_all_nse_tickers()
         if not tickers:
-            st.error("The NSE list did not load. Try again in a minute, or paste your "
-                     "own list in the sidebar.")
+            st.error("The NSE list did not load. Try again in a minute, or use My list.")
             st.stop()
     else:
         tickers = parse_uploaded_symbols(uploaded or "")
@@ -702,21 +772,37 @@ if run:
 results = st.session_state.get("results")
 
 if results is None:
-    st.info("Set your RSI threshold and stock list in the sidebar, then run the screen. "
-            "You can also look up any single stock from there.")
+    st.info("Pick a stock list, set your RSI threshold, then run the screen. "
+            "You can also look up any single stock from the sidebar.")
 elif results.empty:
-    st.warning(f"Nothing is at RSI {st.session_state.get('threshold', threshold)} or above "
-               "right now. Lower the threshold or widen the stock list.")
+    st.warning(f"Nothing is at RSI {st.session_state.get('threshold', threshold)} or "
+               "above right now. Lower the threshold or widen the stock list.")
 else:
     st.markdown(f"**{len(results)} stocks** at RSI "
                 f"{st.session_state.get('threshold', threshold)} or above, "
                 f"from {st.session_state.get('scanned', 0)} scanned.")
+
+    disp = results.copy()
+    disp["Stock Symbol"] = disp["Stock Symbol"].apply(lambda s: f"?stock={s}")
+
+    def _style(col):
+        if col.name == "RSI":
+            return [f"color:{rsi_color(v)};font-weight:600" for v in col]
+        if col.name == "Sector":
+            return [f"color:{sector_color(v)};font-weight:500" for v in col]
+        if col.name == "Buy/Sell":
+            return [f"color:{reco_color(v)};font-weight:500" for v in col]
+        return ["" for _ in col]
+
     event = st.dataframe(
-        results, use_container_width=True, hide_index=True,
+        disp.style.apply(_style, axis=0),
+        use_container_width=True, hide_index=True,
         on_select="rerun", selection_mode="single-row", key="screener_table",
         column_config={
-            "RSI": st.column_config.ProgressColumn("RSI", min_value=0, max_value=100,
-                                                   format="%.1f"),
+            "Stock Symbol": st.column_config.LinkColumn(
+                "Stock Symbol", display_text=r"stock=(.+)",
+                help="Click the symbol to open its detail view"),
+            "RSI": st.column_config.NumberColumn("RSI", format="%.1f"),
             "Current Price (Rs)": st.column_config.NumberColumn(format="%.2f"),
             "52 Week High (Rs)": st.column_config.NumberColumn(format="%.2f"),
         })
